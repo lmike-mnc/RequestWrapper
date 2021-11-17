@@ -1,3 +1,3 @@
 public enum STATUS {
-    DONE
+    @SuppressWarnings("unused") DONE
 }

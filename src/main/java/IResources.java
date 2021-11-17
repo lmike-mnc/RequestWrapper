@@ -14,6 +14,7 @@ import java.util.List;
 import java.util.Objects;
 import java.util.stream.Collectors;
 
+@SuppressWarnings("ALL")
 public interface IResources {
     org.slf4j.Logger LOG = LoggerFactory.getLogger(new Throwable().getStackTrace()[0].getClassName());
     URL jar = IResources.class.getProtectionDomain().getCodeSource().getLocation();
