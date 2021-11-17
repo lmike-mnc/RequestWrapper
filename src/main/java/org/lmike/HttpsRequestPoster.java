@@ -20,8 +20,12 @@ import java.util.stream.Collectors;
 public class HttpsRequestPoster {
     static final org.slf4j.Logger LOG = LoggerFactory.getLogger(new Throwable().getStackTrace()[0].getClassName());
     private static final int STATUS_OK = 200;
-    private enum ARGS {FILE, METHOD, URI, DATA, JSON}
 
+    private enum ARGS {FILE, METHOD, URI, DATA, TOKEN, JSON}
+
+    private enum METHODS {deleteRequestWithAuthToken, getRequest, getFileRequest, postRequest, postRequestWithAuthToken, putRequestWithAuthToken}
+
+    ;
     static boolean res2File;
     static String apiAuth;
     static String apiRegUnits;
@@ -40,34 +44,35 @@ public class HttpsRequestPoster {
         } catch (IOException e) {
             e.printStackTrace();
         }
-        apiAuth= apiProp.getProperty("apiAuth");
-        apiRegUnits=apiProp.getProperty("apiRegUnits");
+        apiAuth = apiProp.getProperty("apiAuth");
+        apiRegUnits = apiProp.getProperty("apiRegUnits");
     }
 
-    public static String getToken(){
-        String token=null;
+    public static String getToken() {
+        String token = null;
         try (InputStream inputStream = HttpsRequestPoster.class.getResourceAsStream("/package.json")) {
             if (inputStream != null) {
-                String json=new BufferedReader(
+                String json = new BufferedReader(
                         new InputStreamReader(inputStream, StandardCharsets.UTF_8))
                         .lines()
                         .collect(Collectors.joining("\n"));
-                String res=postRequest(apiAuth,json);
-                if (res!=null){
-                    if (res2File){
-                        token=JsonPath.read(new FileInputStream(res),"$.data");
+                String res = postRequest(apiAuth, json);
+                if (res != null) {
+                    if (res2File) {
+                        token = JsonPath.read(new FileInputStream(res), "$.data");
 
-                    }else{
-                        token=JsonPath.read(res,"$.data");
+                    } else {
+                        token = JsonPath.read(res, "$.data");
                     }
-                    LOG.info("\n->"+Thread.currentThread().getStackTrace()[1].getMethodName()+":"+token);
+                    LOG.info("\n->" + Thread.currentThread().getStackTrace()[1].getMethodName() + ":" + token);
                 }
             }
         } catch (IOException e) {
-            LOG.trace("exception",e);
+            LOG.error("exception", e);
         }
         return token;
     }
+
     public static String getFileRequest(String url, String authToken, String filename) throws IOException {
         HttpGet request = new HttpGet(url);
         // add request headers
@@ -82,10 +87,10 @@ public class HttpsRequestPoster {
                 HttpEntity entity = response.getEntity();
                 Header headers = entity.getContentType();
                 LOG.debug(String.valueOf(headers));
-                int status=response.getStatusLine().getStatusCode();
-                if (status!=STATUS_OK){
-                    LOG.error("\n->error:"+status+";"+response.getStatusLine().getReasonPhrase());
-                }else {
+                int status = response.getStatusLine().getStatusCode();
+                if (status != STATUS_OK) {
+                    LOG.error("\n->error:" + status + ";" + response.getStatusLine().getReasonPhrase());
+                } else {
                     File myFile = new File(filename);
                     FileOutputStream outStream = new FileOutputStream(myFile);
                     entity.writeTo(outStream);
@@ -121,10 +126,10 @@ public class HttpsRequestPoster {
 
         try (CloseableHttpClient httpClient = HttpClients.createDefault()) {
             try (CloseableHttpResponse response = httpClient.execute(method)) {
-                int status=response.getStatusLine().getStatusCode();
-                if (status!=STATUS_OK){
-                    LOG.error("\n->error:"+status+";"+response.getStatusLine().getReasonPhrase());
-                }else{
+                int status = response.getStatusLine().getStatusCode();
+                if (status != STATUS_OK) {
+                    LOG.error("\n->error:" + status + ";" + response.getStatusLine().getReasonPhrase());
+                } else {
                     return resultToFile(EntityUtils.toString(response.getEntity()));
                 }
             }
@@ -163,67 +168,94 @@ public class HttpsRequestPoster {
     }
 
     /**
-     *
      * @param txt
      * @return text (contents) or file path (with text contents)
      * @throws IOException
      */
     static String resultToFile(final String txt) throws IOException {
-        String res=txt;
-        LOG.info("\n->text:"+txt);
-        LOG.debug("\n"+TextTest.getBody("->text:"+txt,TextTest.txtRegexp));
+        String res = txt;
+        LOG.info("\n->text:" + txt);
+        LOG.debug("with pattern ->text:\n" + TextTest.getBody("->text:" + txt, TextTest.txtRegexp));
         if (res2File) {
             Path tmp = Files.createTempFile("res", ".txt");
             PrintWriter pw = new PrintWriter(tmp.toFile());
             pw.println(txt);
             pw.close();
             tmp.toFile().deleteOnExit();
-            res=tmp.toFile().getAbsolutePath();
+            res = tmp.toFile().getAbsolutePath();
         }
-        LOG.info("\n->file:"+res);
+        LOG.info("\n->file:" + res);
         return res;
+    }
+    public static String getFileContent(
+            FileInputStream fis,
+            String encoding ) throws IOException
+    {
+        try( BufferedReader br =
+                     new BufferedReader( new InputStreamReader(fis, encoding )))
+        {
+            StringBuilder sb = new StringBuilder();
+            String line;
+            while(( line = br.readLine()) != null ) {
+                sb.append( line );
+                sb.append( '\n' );
+            }
+            return sb.toString();
+        }
     }
 
     public static void main(String[] args) throws IOException {
-        String token=getToken();
-        String data=null;
-        String method=null;
-        String uri=null;
-        if (token!=null){
-            for(String s:args){
-                if(s.toUpperCase().startsWith(String.valueOf(ARGS.FILE))){
-                    data=JsonPath.read(new FileInputStream(s.split("=")[1]),"$");
-                }else if(s.toUpperCase().startsWith(String.valueOf(ARGS.DATA))){
-                    data=s.split("=")[1];
-                }else if(s.toUpperCase().startsWith(String.valueOf(ARGS.METHOD))){
-                    method=s.split("=")[1];
-                }else if(s.toUpperCase().startsWith(String.valueOf(ARGS.URI))){
-                    uri=s.split("=")[1];
-                }
-
+        String token = null;
+        String data = null;
+        String method = null;
+        String uri = null;
+        for (String s : args) {
+            if (s.toUpperCase().startsWith(String.valueOf(ARGS.FILE))) {
+                data = new BufferedReader(
+                        new InputStreamReader(new FileInputStream(s.split("=")[1]), StandardCharsets.UTF_8))
+                        .lines()
+                        .collect(Collectors.joining("\n"));
+            } else if (s.toUpperCase().startsWith(String.valueOf(ARGS.DATA))) {
+                data = s.split("=")[1];
+            } else if (s.toUpperCase().startsWith(String.valueOf(ARGS.METHOD))) {
+                method = s.split("=")[1];
+            } else if (s.toUpperCase().startsWith(String.valueOf(ARGS.URI))) {
+                uri = s.split("=")[1];
+            } else if (s.toUpperCase().startsWith(String.valueOf(ARGS.TOKEN))) {
+                String[] arr = s.split("=");
+                if(arr.length>1)token=arr[1];
+            }
         }
-            if (token!=null && uri!=null && method!=null){
-                switch (method)
-                {
-                    case "deleteRequestWithAuthToken":
-                        deleteRequestWithAuthToken(uri,token);
-                        break;
-                    case "getRequest":
-                        getRequest(uri,token);
-                        break;
-                    case "postRequestWithAuthToken":
-                        if(data!=null )
-                        postRequestWithAuthToken(uri,token,data);
-                        break;
-                    case "PutRequestWithAuthToken":
-                        if(data!=null )
-                        putRequestWithAuthToken(uri,token,data);
-                        break;
-                    case "getFileRequest":
-                        if(data!=null )
-                        getFileRequest(uri,token,data);
-                }
-
+        if (uri != null && method != null) {
+            switch (method) {
+                case "deleteRequestWithAuthToken":
+                    if (token == null) token = getToken();
+                    if (token != null)
+                        deleteRequestWithAuthToken(uri, token);
+                    break;
+                case "getRequest":
+                    if (token == null) token = getToken();
+                    if (token != null)
+                        getRequest(uri, token);
+                    break;
+                case "postRequest":
+                    if (data != null)
+                        postRequest(uri, data);
+                    break;
+                case "postRequestWithAuthToken":
+                    if (token == null) token = getToken();
+                    if (token != null && data != null)
+                        postRequestWithAuthToken(uri, token, data);
+                    break;
+                case "PutRequestWithAuthToken":
+                    if (token == null) token = getToken();
+                    if (token != null && data != null)
+                        putRequestWithAuthToken(uri, token, data);
+                    break;
+                case "getFileRequest":
+                    if (token == null) token = getToken();
+                    if (token != null && data != null)
+                        getFileRequest(uri, token, data);
             }
         }
     }
