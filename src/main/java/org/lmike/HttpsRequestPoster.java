@@ -14,12 +14,14 @@ import java.io.*;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Path;
+import java.util.Arrays;
 import java.util.Properties;
 import java.util.stream.Collectors;
 
 public class HttpsRequestPoster {
     static final org.slf4j.Logger LOG = LoggerFactory.getLogger(new Throwable().getStackTrace()[0].getClassName());
     private static final int STATUS_OK = 200;
+    public static final String URI_TAG = String.valueOf(ARGS.URI);
 
     private enum ARGS {FILE, METHOD, URI, DATA, TOKEN, JSON}
 
@@ -162,7 +164,7 @@ public class HttpsRequestPoster {
                 HttpEntity entity = response.getEntity();
                 Header headers = entity.getContentType();
                 LOG.debug(String.valueOf(headers));
-                return resultToFile(EntityUtils.toString(response.getEntity()));
+                return resultToFile(EntityUtils.toString(response.getEntity(), "UTF-8"));
             }
         }
     }
@@ -209,7 +211,10 @@ public class HttpsRequestPoster {
         String data = null;
         String method = null;
         String uri = null;
+        boolean bToken=false;//token tag is present
+        int i=0;
         for (String s : args) {
+            LOG.debug("arg "+i+" :" + s);
             if (s.toUpperCase().startsWith(String.valueOf(ARGS.FILE))) {
                 data = new BufferedReader(
                         new InputStreamReader(new FileInputStream(s.split("=")[1]), StandardCharsets.UTF_8))
@@ -219,22 +224,31 @@ public class HttpsRequestPoster {
                 data = s.split("=")[1];
             } else if (s.toUpperCase().startsWith(String.valueOf(ARGS.METHOD))) {
                 method = s.split("=")[1];
-            } else if (s.toUpperCase().startsWith(String.valueOf(ARGS.URI))) {
-                uri = s.split("=")[1];
+            } else if (s.toUpperCase().startsWith(URI_TAG)) {
+/*
+                String[] arr= s.split("=");
+                //strip first element with tag
+                arr=Arrays.copyOfRange(arr,1,arr.length);
+                uri =String.join("=",arr);
+*/
+                uri= s.substring(URI_TAG.length()+1);
+                LOG.debug("URL:"+uri);
             } else if (s.toUpperCase().startsWith(String.valueOf(ARGS.TOKEN))) {
+                bToken=true;
                 String[] arr = s.split("=");
                 if(arr.length>1)token=arr[1];
             }
+            i++;
         }
         if (uri != null && method != null) {
             switch (method) {
                 case "deleteRequestWithAuthToken":
-                    if (token == null) token = getToken();
+                    if (token == null && bToken) token = getToken();
                     if (token != null)
                         deleteRequestWithAuthToken(uri, token);
                     break;
                 case "getRequest":
-                    if (token == null) token = getToken();
+                    if (token == null && bToken) token = getToken();
                     if (token != null)
                         getRequest(uri, token);
                     break;
@@ -243,17 +257,17 @@ public class HttpsRequestPoster {
                         postRequest(uri, data);
                     break;
                 case "postRequestWithAuthToken":
-                    if (token == null) token = getToken();
+                    if (token == null && bToken) token = getToken();
                     if (token != null && data != null)
                         postRequestWithAuthToken(uri, token, data);
                     break;
                 case "PutRequestWithAuthToken":
-                    if (token == null) token = getToken();
+                    if (token == null && bToken) token = getToken();
                     if (token != null && data != null)
                         putRequestWithAuthToken(uri, token, data);
                     break;
                 case "getFileRequest":
-                    if (token == null) token = getToken();
+                    if (token == null && bToken) token = getToken();
                     if (token != null && data != null)
                         getFileRequest(uri, token, data);
             }
